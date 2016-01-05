@@ -11,6 +11,7 @@ struct Space2d {
     width: u32,
     height: u32,
     matrix: Vec<u8>,
+    neighborhood: Vec<u8>,
 }
 
 impl Space2d {
@@ -21,6 +22,7 @@ impl Space2d {
             width: w,
             height: h,
             matrix: (0..nelems).map(|_| 0).collect(),
+            neighborhood: (0..nelems).map(|_| 0).collect(),
         }
     }
 
@@ -30,12 +32,7 @@ impl Space2d {
     }
 
     fn attaches(&self, p: &Particle) -> bool {
-        let idx = self.xy_to_index(p.x, p.y);
-        let rw = self.width as usize + 2;
-        (self.matrix[idx - 1 - rw] | self.matrix[idx - rw] | self.matrix[idx + 1 - rw] |
-         self.matrix[idx - 1] | self.matrix[idx] | self.matrix[idx + 1] |
-         self.matrix[idx - 1 + rw] | self.matrix[idx + rw] |
-         self.matrix[idx + 1 + rw]) == 1
+        self.neighborhood[self.xy_to_index(p.x, p.y)] != 0
     }
 
     fn random_walk<R: Rng>(&mut self, rng: &mut R) {
@@ -81,6 +78,17 @@ impl Space2d {
     fn set_seed(&mut self, x: u32, y: u32) {
         let idx = self.xy_to_index(x, y);
         self.matrix[idx] = 1;
+
+        let rw = self.width as usize + 2;
+        self.neighborhood[idx - 1 - rw] = 1;
+        self.neighborhood[idx - rw] = 1;
+        self.neighborhood[idx + 1 - rw] = 1;
+        self.neighborhood[idx - 1] = 1;
+        self.neighborhood[idx] = 1;
+        self.neighborhood[idx + 1] = 1;
+        self.neighborhood[idx - 1 + rw] = 1;
+        self.neighborhood[idx + rw] = 1;
+        self.neighborhood[idx + 1 + rw] = 1;
     }
 
     fn get_pixel(&self, x: u32, y: u32) -> u8 {
