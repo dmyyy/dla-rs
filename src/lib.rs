@@ -1,12 +1,11 @@
 extern crate rand;
 extern crate image;
-extern crate pcg;
 
-use pcg::PcgRng;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 use std::fs::File;
 use std::path::Path;
 
+/// An aggregate particle attached to some other particle.
 #[derive(Copy, Clone)]
 struct Aggregate {
     /// Age (iteration number)
@@ -16,6 +15,7 @@ struct Aggregate {
     parent: (u32, u32),
 }
 
+/// A moving particle
 struct Particle {
     x: u32,
     y: u32,
@@ -151,7 +151,7 @@ impl Space2d {
     }
 }
 
-fn simulate_dla<R>(rng: &mut R,
+pub fn simulate_dla<R>(rng: &mut R,
                    width: u32,
                    height: u32,
                    iterations: u32,
@@ -177,62 +177,4 @@ fn simulate_dla<R>(rng: &mut R,
         space.random_walk(i, rng);
     }
     space.save_png(&format!("{}_final.png", basename), colors, colors_step);
-}
-
-fn conf_middle() {
-    let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
-    const W: u32 = 400;
-    const H: u32 = 300;
-    const N: u32 = 20_000;
-
-    let seeds = vec![(W / 2, H / 2)];
-    simulate_dla(&mut rng,
-                 W,
-                 H,
-                 N,
-                 &seeds,
-                 &[(0, 0, 0)],
-                 1,
-                 500,
-                 "dla_middle");
-}
-
-fn conf_23() {
-    let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
-    const W: u32 = 400;
-    const H: u32 = 180;
-    const N: u32 = 20_000;
-
-    const N_IN: u32 = 2;
-    const N_OUT: u32 = 3;
-    const SEED_HALF_WIDTH: u32 = 2;
-    const SEED_HEIGHT: u32 = 2;
-
-    let mut seeds = Vec::new();
-
-    for i in 0..N_IN {
-        for y in 0..SEED_HEIGHT {
-            for x in 0..SEED_HALF_WIDTH {
-                seeds.push(((i + 1) * W / (N_IN + 1) + x, y));
-                seeds.push(((i + 1) * W / (N_IN + 1) - x, y));
-            }
-        }
-    }
-
-    for i in 0..N_OUT {
-        for y in 0..SEED_HEIGHT {
-            for x in 0..SEED_HALF_WIDTH {
-                seeds.push(((i + 1) * W / (N_OUT + 1) + x, H - 1 - y));
-                seeds.push(((i + 1) * W / (N_OUT + 1) - x, H - 1 - y));
-            }
-        }
-    }
-
-    let colors = [(0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255)];
-    simulate_dla(&mut rng, W, H, N, &seeds, &colors, 2000, 500, "dla_23");
-}
-
-fn main() {
-    conf_middle();
-    conf_23();
 }
