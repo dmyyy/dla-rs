@@ -10,7 +10,10 @@ use std::path::Path;
 struct Space2d {
     width: u32,
     height: u32,
-    matrix: Vec<u8>,
+    // a value < 0 means empty.
+    age_matrix: Vec<i32>,
+
+    /// The attraction neighborhood
     neighborhood: Vec<u8>,
 }
 
@@ -21,21 +24,21 @@ impl Space2d {
         Space2d {
             width: w,
             height: h,
-            matrix: (0..nelems).map(|_| 0).collect(),
+            age_matrix: (0..nelems).map(|_| -1).collect(),
             neighborhood: (0..nelems).map(|_| 0).collect(),
         }
     }
 
     fn in_free_space(&self, p: &Particle) -> bool {
         let idx = self.xy_to_index(p.x, p.y);
-        self.matrix[idx] == 0
+        self.age_matrix[idx] < 0
     }
 
     fn attaches(&self, p: &Particle) -> bool {
         self.neighborhood[self.xy_to_index(p.x, p.y)] != 0
     }
 
-    fn random_walk<R: Rng>(&mut self, rng: &mut R) {
+    fn random_walk<R: Rng>(&mut self, iter: i32, rng: &mut R) {
         let mut p;
 
         // find free space
@@ -53,7 +56,7 @@ impl Space2d {
         // now simulate until it hits another particle.
         loop {
             if self.attaches(&p) {
-                self.set_seed(p.x, p.y);
+                self.set_seed(p.x, p.y, iter);
                 break;
             }
             let mut x: i32 = p.x as i32;
@@ -75,9 +78,9 @@ impl Space2d {
         }
     }
 
-    fn set_seed(&mut self, x: u32, y: u32) {
+    fn set_seed(&mut self, x: u32, y: u32, age: i32) {
         let idx = self.xy_to_index(x, y);
-        self.matrix[idx] = 1;
+        self.age_matrix[idx] = age;
 
         let rw = self.width as usize + 2;
         self.neighborhood[idx - 1 - rw] = 1;
@@ -91,9 +94,9 @@ impl Space2d {
         self.neighborhood[idx + 1 + rw] = 1;
     }
 
-    fn get_pixel(&self, x: u32, y: u32) -> u8 {
+    fn get_pixel(&self, x: u32, y: u32) -> i32 {
         let idx = self.xy_to_index(x, y);
-        self.matrix[idx]
+        self.age_matrix[idx]
     }
 
     #[inline]
@@ -103,16 +106,24 @@ impl Space2d {
         (y as usize + 1) * rw + x as usize + 1
     }
 
-    fn save_png(&self, filename: &str) {
-        let mut imgbuf = image::ImageBuffer::new(self.width, self.height);
+    fn save_png(&self, filename: &str, colors: &[(u8, u8, u8)], colors_step: u32) {
+        let mut imgbuf = image::RgbaImage::new(self.width, self.height);
 
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            let luma: u8 = 255 * self.get_pixel(x, y);
-            *pixel = image::Luma([luma]);
+            let age = self.get_pixel(x, y);
+
+            let (r, g, b) = if age < 0 {
+                // white
+                (255, 255, 255)
+            } else {
+                let age = ((age as u32) / colors_step) as usize;
+                colors[age % colors.len()]
+            };
+            *pixel = image::Rgba([r, g, b, 255]);
         }
 
         let ref mut fout = File::create(&Path::new(filename)).unwrap();
-        let _ = image::ImageLuma8(imgbuf).save(fout, image::PNG).unwrap();
+        let _ = image::DynamicImage::ImageRgba8(imgbuf).save(fout, image::PNG).unwrap();
     }
 }
 
@@ -121,18 +132,88 @@ struct Particle {
     y: u32,
 }
 
-fn main() {
-    let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
+fn simulate_dla<R>(rng: &mut R,
+                   width: u32,
+                   height: u32,
+                   iterations: u32,
+                   seeds: &[(u32, u32)],
+                   colors: &[(u8, u8, u8)],
+                   colors_step: u32,
+                   save_every: u32,
+                   basename: &str)
+    where R: Rng
+{
+    let mut space = Space2d::new(width, height);
 
-    const W: u32 = 400;
-    const H: u32 = 400;
-    const N: u32 = 10000;
-
-    let mut space = Space2d::new(W, H);
-    space.set_seed(W / 2, H / 2);
-    for _ in 0..N {
-        space.random_walk(&mut rng);
+    for &(x, y) in seeds {
+        space.set_seed(x, y, 0);
     }
 
-    space.save_png("dla.png");
+    space.save_png(&format!("{}_init.png", basename), colors, colors_step);
+
+    for i in 1..iterations + 1 {
+        if i % save_every == 0 {
+            space.save_png(&format!("{}_{:05}.png", basename, i), colors, colors_step);
+        }
+        space.random_walk(i as i32, rng);
+    }
+    space.save_png(&format!("{}_final.png", basename), colors, colors_step);
+}
+
+fn conf_middle() {
+    let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
+    const W: u32 = 400;
+    const H: u32 = 300;
+    const N: u32 = 20_000;
+
+    let seeds = vec![(W / 2, H / 2)];
+    simulate_dla(&mut rng,
+                 W,
+                 H,
+                 N,
+                 &seeds,
+                 &[(0, 0, 0)],
+                 1,
+                 500,
+                 "dla_middle");
+}
+
+fn conf_23() {
+    let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
+    const W: u32 = 400;
+    const H: u32 = 180;
+    const N: u32 = 20_000;
+
+    const N_IN: u32 = 2;
+    const N_OUT: u32 = 3;
+    const SEED_HALF_WIDTH: u32 = 2;
+    const SEED_HEIGHT: u32 = 2;
+
+    let mut seeds = Vec::new();
+
+    for i in 0..N_IN {
+        for y in 0..SEED_HEIGHT {
+            for x in 0..SEED_HALF_WIDTH {
+                seeds.push(((i + 1) * W / (N_IN + 1) + x, y));
+                seeds.push(((i + 1) * W / (N_IN + 1) - x, y));
+            }
+        }
+    }
+
+    for i in 0..N_OUT {
+        for y in 0..SEED_HEIGHT {
+            for x in 0..SEED_HALF_WIDTH {
+                seeds.push(((i + 1) * W / (N_OUT + 1) + x, H - 1 - y));
+                seeds.push(((i + 1) * W / (N_OUT + 1) - x, H - 1 - y));
+            }
+        }
+    }
+
+    let colors = [(0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255)];
+    simulate_dla(&mut rng, W, H, N, &seeds, &colors, 2000, 500, "dla_23");
+}
+
+fn main() {
+    conf_middle();
+    conf_23();
 }
