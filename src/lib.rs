@@ -11,8 +11,8 @@ struct Aggregate {
     /// Age (iteration number)
     age: u32,
 
-    /// Points to the position of the parent particle
-    parent: (u32, u32),
+    /// Points to the index of the parent particle
+    parent: usize,
 }
 
 /// A moving particle
@@ -26,11 +26,35 @@ pub struct Space2d {
     height: u32,
 
     /// For every point in the space, store information about a resting particle.
-
     aggregates: Vec<Option<Aggregate>>,
 
     /// The attraction neighborhood
     neighborhood: Vec<u8>,
+}
+
+struct PotentialParents {
+    len: usize,
+    arr: [usize; 8],
+}
+
+impl PotentialParents {
+    fn new() -> Self {
+        PotentialParents {
+            len: 0,
+            arr: [0; 8],
+        }
+    }
+    fn len(&self) -> usize {
+        self.len
+    }
+    fn push(&mut self, element: usize) {
+        debug_assert!(self.len < 8);
+        self.arr[self.len] = element;
+        self.len += 1;
+    }
+    fn as_slice(&self) -> &[usize] {
+        &self.arr[0..self.len]
+    }
 }
 
 impl Space2d {
@@ -72,7 +96,7 @@ impl Space2d {
         // now simulate until it hits another particle.
         loop {
             if self.attaches(&p) {
-                self.set_seed(p.x, p.y, iter);
+                self.set_aggregate(p.x, p.y, iter, rng);
                 break;
             }
             let mut x: i32 = p.x as i32;
@@ -96,9 +120,49 @@ impl Space2d {
 
     pub fn set_seed(&mut self, x: u32, y: u32, age: u32) {
         let idx = self.xy_to_index(x, y);
-        self.aggregates[idx] = Some(Aggregate{
+        self.aggregates[idx] = Some(Aggregate {
             age: age,
-            parent: (x, y), // we are a root, so we are ourselves' parent
+            parent: idx, // we are a root, so we are ourselves' parent
+        });
+
+        self.set_neighborhood(idx);
+    }
+
+    /// There can be up to eight potential parent particles which this particle could attach to.
+    /// Choose a random one in case there is more than one.
+
+    fn set_aggregate<R>(&mut self, x: u32, y: u32, age: u32, rng: &mut R)
+        where R: Rng
+    {
+        let idx = self.xy_to_index(x, y);
+
+        let ix = x as i32;
+        let iy = y as i32;
+
+        let mut potential_parents = PotentialParents::new();
+
+        for &yoff in &[-1, 0, 1] {
+            for &xoff in &[-1, 0, 1] {
+                if xoff == 0 && yoff == 0 {
+                    continue;
+                }
+                if let Some(i) = self.xy_opt_to_index(ix + xoff, iy + yoff) {
+                    potential_parents.push(i);
+                }
+            }
+        }
+
+        let parent = match potential_parents.len() {
+            0 => {
+                panic!();
+            }
+            1 => potential_parents.as_slice()[0],
+            n => potential_parents.as_slice()[rng.gen_range(0, n)],
+        };
+
+        self.aggregates[idx] = Some(Aggregate {
+            age: age,
+            parent: parent,
         });
 
         self.set_neighborhood(idx);
@@ -129,6 +193,15 @@ impl Space2d {
         (y as usize + 1) * rw + x as usize + 1
     }
 
+    #[inline]
+    fn xy_opt_to_index(&self, x: i32, y: i32) -> Option<usize> {
+        if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
+            None
+        } else {
+            Some(self.xy_to_index(x as u32, y as u32))
+        }
+    }
+
     pub fn save_png(&self, filename: &str, colors: &[(u8, u8, u8)], colors_step: u32) {
         let mut imgbuf = image::RgbaImage::new(self.width, self.height);
 
@@ -152,14 +225,14 @@ impl Space2d {
 }
 
 pub fn simulate_dla<R>(rng: &mut R,
-                   width: u32,
-                   height: u32,
-                   iterations: u32,
-                   seeds: &[(u32, u32)],
-                   colors: &[(u8, u8, u8)],
-                   colors_step: u32,
-                   save_every: u32,
-                   basename: &str)
+                       width: u32,
+                       height: u32,
+                       iterations: u32,
+                       seeds: &[(u32, u32)],
+                       colors: &[(u8, u8, u8)],
+                       colors_step: u32,
+                       save_every: u32,
+                       basename: &str)
     where R: Rng
 {
     let mut space = Space2d::new(width, height);
