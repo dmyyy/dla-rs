@@ -21,7 +21,7 @@ struct Particle {
     y: u32,
 }
 
-struct Space2d {
+pub struct Space2d {
     width: u32,
     height: u32,
 
@@ -34,7 +34,7 @@ struct Space2d {
 }
 
 impl Space2d {
-    fn new(w: u32, h: u32) -> Space2d {
+    pub fn new(w: u32, h: u32) -> Space2d {
         assert!(w > 0 && h > 0);
         let nelems = (w + 2) as usize * (h + 2) as usize;
         Space2d {
@@ -54,7 +54,7 @@ impl Space2d {
         self.neighborhood[self.xy_to_index(p.x, p.y)] != 0
     }
 
-    fn random_walk<R: Rng>(&mut self, iter: u32, rng: &mut R) {
+    pub fn random_walk<R: Rng>(&mut self, iter: u32, rng: &mut R) {
         let mut p;
 
         // find free space
@@ -94,13 +94,17 @@ impl Space2d {
         }
     }
 
-    fn set_seed(&mut self, x: u32, y: u32, age: u32) {
+    pub fn set_seed(&mut self, x: u32, y: u32, age: u32) {
         let idx = self.xy_to_index(x, y);
         self.aggregates[idx] = Some(Aggregate{
             age: age,
             parent: (x, y), // we are a root, so we are ourselves' parent
         });
 
+        self.set_neighborhood(idx);
+    }
+
+    fn set_neighborhood(&mut self, idx: usize) {
         let rw = self.width as usize + 2;
         self.neighborhood[idx - 1 - rw] = 1;
         self.neighborhood[idx - rw] = 1;
@@ -125,7 +129,7 @@ impl Space2d {
         (y as usize + 1) * rw + x as usize + 1
     }
 
-    fn save_png(&self, filename: &str, colors: &[(u8, u8, u8)], colors_step: u32) {
+    pub fn save_png(&self, filename: &str, colors: &[(u8, u8, u8)], colors_step: u32) {
         let mut imgbuf = image::RgbaImage::new(self.width, self.height);
 
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
