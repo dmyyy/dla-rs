@@ -7,11 +7,27 @@ use rand::{Rng, SeedableRng};
 use std::fs::File;
 use std::path::Path;
 
+#[derive(Copy, Clone)]
+struct Aggregate {
+    /// Age (iteration number)
+    age: u32,
+
+    /// Points to the position of the parent particle
+    parent: (u32, u32),
+}
+
+struct Particle {
+    x: u32,
+    y: u32,
+}
+
 struct Space2d {
     width: u32,
     height: u32,
-    // a value < 0 means empty.
-    age_matrix: Vec<i32>,
+
+    /// For every point in the space, store information about a resting particle.
+
+    aggregates: Vec<Option<Aggregate>>,
 
     /// The attraction neighborhood
     neighborhood: Vec<u8>,
@@ -24,21 +40,21 @@ impl Space2d {
         Space2d {
             width: w,
             height: h,
-            age_matrix: (0..nelems).map(|_| -1).collect(),
+            aggregates: (0..nelems).map(|_| None).collect(),
             neighborhood: (0..nelems).map(|_| 0).collect(),
         }
     }
 
     fn in_free_space(&self, p: &Particle) -> bool {
         let idx = self.xy_to_index(p.x, p.y);
-        self.age_matrix[idx] < 0
+        self.aggregates[idx].is_none()
     }
 
     fn attaches(&self, p: &Particle) -> bool {
         self.neighborhood[self.xy_to_index(p.x, p.y)] != 0
     }
 
-    fn random_walk<R: Rng>(&mut self, iter: i32, rng: &mut R) {
+    fn random_walk<R: Rng>(&mut self, iter: u32, rng: &mut R) {
         let mut p;
 
         // find free space
@@ -78,9 +94,12 @@ impl Space2d {
         }
     }
 
-    fn set_seed(&mut self, x: u32, y: u32, age: i32) {
+    fn set_seed(&mut self, x: u32, y: u32, age: u32) {
         let idx = self.xy_to_index(x, y);
-        self.age_matrix[idx] = age;
+        self.aggregates[idx] = Some(Aggregate{
+            age: age,
+            parent: (x, y), // we are a root, so we are ourselves' parent
+        });
 
         let rw = self.width as usize + 2;
         self.neighborhood[idx - 1 - rw] = 1;
@@ -94,9 +113,9 @@ impl Space2d {
         self.neighborhood[idx + 1 + rw] = 1;
     }
 
-    fn get_pixel(&self, x: u32, y: u32) -> i32 {
+    fn get_pixel(&self, x: u32, y: u32) -> Option<u32> {
         let idx = self.xy_to_index(x, y);
-        self.age_matrix[idx]
+        self.aggregates[idx].map(|p| p.age)
     }
 
     #[inline]
@@ -110,14 +129,15 @@ impl Space2d {
         let mut imgbuf = image::RgbaImage::new(self.width, self.height);
 
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            let age = self.get_pixel(x, y);
-
-            let (r, g, b) = if age < 0 {
-                // white
-                (255, 255, 255)
-            } else {
-                let age = ((age as u32) / colors_step) as usize;
-                colors[age % colors.len()]
+            let (r, g, b) = match self.get_pixel(x, y) {
+                None => {
+                    // white
+                    (255, 255, 255)
+                }
+                Some(age) => {
+                    let age = ((age as u32) / colors_step) as usize;
+                    colors[age % colors.len()]
+                }
             };
             *pixel = image::Rgba([r, g, b, 255]);
         }
@@ -125,11 +145,6 @@ impl Space2d {
         let ref mut fout = File::create(&Path::new(filename)).unwrap();
         let _ = image::DynamicImage::ImageRgba8(imgbuf).save(fout, image::PNG).unwrap();
     }
-}
-
-struct Particle {
-    x: u32,
-    y: u32,
 }
 
 fn simulate_dla<R>(rng: &mut R,
@@ -155,7 +170,7 @@ fn simulate_dla<R>(rng: &mut R,
         if i % save_every == 0 {
             space.save_png(&format!("{}_{:05}.png", basename, i), colors, colors_step);
         }
-        space.random_walk(i as i32, rng);
+        space.random_walk(i, rng);
     }
     space.save_png(&format!("{}_final.png", basename), colors, colors_step);
 }
