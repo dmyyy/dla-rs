@@ -20,6 +20,7 @@ fn main() {
                  &seeds,
                  &[(0, 0, 0)],
                  1,
+                 None,
                  500,
                  "dla_middle");
 }

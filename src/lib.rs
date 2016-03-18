@@ -297,6 +297,12 @@ impl Space2d {
     }
 }
 
+pub struct Pruning {
+    pub probability: f32,
+    pub every: u32,
+    pub age: i32,
+}
+
 pub fn simulate_dla<R>(rng: &mut R,
                        width: u32,
                        height: u32,
@@ -304,39 +310,9 @@ pub fn simulate_dla<R>(rng: &mut R,
                        seeds: &[(u32, u32)],
                        colors: &[(u8, u8, u8)],
                        colors_step: u32,
+                       pruning: Option<Pruning>,
                        save_every: u32,
                        basename: &str)
-    where R: Rng
-{
-    let mut space = Space2d::new(width, height);
-
-    for &(x, y) in seeds {
-        space.set_seed(x, y, 0);
-    }
-
-    space.save_png(&format!("{}_init.png", basename), colors, colors_step);
-
-    for i in 1..iterations + 1 {
-        if i % save_every == 0 {
-            space.save_png(&format!("{}_{:05}.png", basename, i), colors, colors_step);
-        }
-        space.random_walk(i as i32, rng);
-    }
-    space.save_png(&format!("{}_final.png", basename), colors, colors_step);
-}
-
-pub fn simulate_dla_with_pruning<R>(rng: &mut R,
-                                    width: u32,
-                                    height: u32,
-                                    iterations: u32,
-                                    seeds: &[(u32, u32)],
-                                    colors: &[(u8, u8, u8)],
-                                    colors_step: u32,
-                                    prune_probability: f32,  
-                                    prune_every: u32,
-                                    prune_age: i32,
-                                    save_every: u32,
-                                    basename: &str)
     where R: Rng
 {
     let mut space = Space2d::new(width, height);
@@ -352,8 +328,10 @@ pub fn simulate_dla_with_pruning<R>(rng: &mut R,
             space.save_png(&format!("{}_{:05}.png", basename, i), colors, colors_step);
         }
         space.random_walk(i as i32, rng);
-        if i % prune_every == 0 {
-            space.prune(prune_probability, i as i32 - prune_age, rng);
+        if let Some(ref prune) = pruning {
+            if i % prune.every == 0 {
+                space.prune(prune.probability, i as i32 - prune.age, rng);
+            }
         }
     }
     space.save_png(&format!("{}_final.png", basename), colors, colors_step);

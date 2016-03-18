@@ -4,7 +4,7 @@ extern crate rand;
 
 use pcg::PcgRng;
 use rand::SeedableRng;
-use dla::simulate_dla_with_pruning;
+use dla::{simulate_dla, Pruning};
 
 fn main() {
     let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
@@ -13,16 +13,18 @@ fn main() {
     const N: u32 = 20_000;
 
     let seeds = vec![(W / 2, H / 2)];
-    simulate_dla_with_pruning(&mut rng,
+    simulate_dla(&mut rng,
                  W,
                  H,
                  N,
                  &seeds,
                  &[(0, 0, 0)],
                  1,
-                 0.5,
-                 10, // prune every
-                 40, // prune max age.
+                 Some(Pruning {
+                     probability: 0.87,
+                     every: 15,
+                     age: 40,
+                 }),
                  500,
-                 "dla_middle");
+                 "dla_pruning");
 }

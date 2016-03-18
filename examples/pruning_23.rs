@@ -4,7 +4,7 @@ extern crate rand;
 
 use pcg::PcgRng;
 use rand::SeedableRng;
-use dla::simulate_dla;
+use dla::{simulate_dla, Pruning};
 
 fn main() {
     let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
@@ -37,6 +37,21 @@ fn main() {
         }
     }
 
+    let pruning = Some(Pruning {
+        probability: 0.5,
+        every: 10,
+        age: 40,
+    });
+
     let colors = [(0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255)];
-    simulate_dla(&mut rng, W, H, N, &seeds, &colors, 2000, None, 500, "dla_23");
+    simulate_dla(&mut rng,
+                 W,
+                 H,
+                 N,
+                 &seeds,
+                 &colors,
+                 2000,
+                 pruning,
+                 500,
+                 "dla_pruning_23");
 }
