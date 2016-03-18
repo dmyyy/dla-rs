@@ -10,7 +10,7 @@ fn main() {
     let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
     const W: u32 = 400;
     const H: u32 = 180;
-    const N: u32 = 20_000;
+    const N: u32 = 50_000;
 
     const N_IN: u32 = 2;
     const N_OUT: u32 = 3;
@@ -38,9 +38,9 @@ fn main() {
     }
 
     let pruning = Some(Pruning {
-        probability: 0.5,
+        probability: 0.4,
         every: 10,
-        age: 40,
+        age: 100,
     });
 
     let colors = [(0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255)];
