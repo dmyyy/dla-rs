@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/mneumann/dla-rs"
 description = "Diffusion-limited aggregation for Rust"
 keywords = ["fractal"]
-include = ["src/*.rs", "examples/*.rs", "Cargo.toml", "README.md", "LICENSE", "dla.png"]
+include = ["src/*.rs", "examples/*.rs", "Cargo.toml", "README.md", "LICENSE", "images/dla.png"]
 
 [dependencies]
 
