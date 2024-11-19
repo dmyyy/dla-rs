@@ -7,11 +7,12 @@ repository = "https://github.com/mneumann/dla-rs"
 description = "Diffusion-limited aggregation for Rust"
 keywords = ["fractal"]
 include = ["src/*.rs", "examples/*.rs", "Cargo.toml", "README.md", "LICENSE", "images/dla.png"]
+edition = "2021"
 
 [dependencies]
-
-image = "0.6.1"
-rand = "0.3"
+image = "0.25.1"
+rand = "0.8.5"
 
 [dev-dependencies]
-pcg = { git = "https://github.com/codahale/pcg.git" }
+bevy_rand = "0.5"
+bevy_prng = { version = "0.5", features = ["wyrand"] }

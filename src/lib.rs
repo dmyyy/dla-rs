@@ -1,39 +1,39 @@
-extern crate rand;
-extern crate image;
-
 use rand::Rng;
-use std::fs::File;
-use std::path::Path;
 use std::usize;
 use std::cmp;
+use std::path::Path;
 
-/// An aggregate particle attached to some other particle.
-#[derive(Copy, Clone)]
-struct Aggregate {
-    /// Age (iteration number). If negative, aggregate does not exist.
-    age: i32,
+pub fn simulate_dla<R>(rng: &mut R,
+                       width: u32,
+                       height: u32,
+                       iterations: u32,
+                       seeds: &[(u32, u32)],
+                       pruning: Option<Pruning>) -> Space2d
+    where R: Rng
+{
+    let mut space = Space2d::new(width, height);
 
-    /// Counts the number of children we have
-    children: u32,
+    for &(x, y) in seeds {
+        space.set_seed(x, y, 0);
+    }
 
-    /// Points to the index of the parent particle
-    parent: usize,
-}
-
-impl Aggregate {
-    fn empty() -> Self {
-        Aggregate {
-            age: -1,
-            children: 0,
-            parent: usize::MAX,
+    for i in 0..iterations {
+        space.random_walk(i as i32, rng);
+        if let Some(ref prune) = pruning {
+            if i % prune.every == 0 {
+                space.prune(prune.probability, i as i32 - prune.age, rng);
+            }
         }
     }
+
+    space
 }
 
-/// A moving particle
-struct Particle {
-    x: u32,
-    y: u32,
+// TODO: figure out how pruning works? no documentation :(
+pub struct Pruning {
+    pub probability: f32,
+    pub every: u32,
+    pub age: i32,
 }
 
 pub struct Space2d {
@@ -47,30 +47,6 @@ pub struct Space2d {
     neighborhood: Vec<u8>,
 }
 
-struct PotentialParents {
-    len: usize,
-    arr: [usize; 8],
-}
-
-impl PotentialParents {
-    fn new() -> Self {
-        PotentialParents {
-            len: 0,
-            arr: [0; 8],
-        }
-    }
-    fn len(&self) -> usize {
-        self.len
-    }
-    fn push(&mut self, element: usize) {
-        debug_assert!(self.len < 8);
-        self.arr[self.len] = element;
-        self.len += 1;
-    }
-    fn as_slice(&self) -> &[usize] {
-        &self.arr[0..self.len]
-    }
-}
 
 impl Space2d {
     pub fn new(w: u32, h: u32) -> Space2d {
@@ -84,57 +60,56 @@ impl Space2d {
         }
     }
 
-    fn in_free_space(&self, p: &Particle) -> bool {
-        let idx = self.xy_to_index(p.x, p.y);
+    fn in_free_space(&self, x: u32, y: u32) -> bool {
+        let idx = self.xy_to_index(x, y);
         self.aggregates[idx].age < 0
     }
 
-    fn attaches(&self, p: &Particle) -> bool {
-        self.neighborhood[self.xy_to_index(p.x, p.y)] != 0
+    fn attaches(&self, x: u32, y: u32) -> bool {
+        self.neighborhood[self.xy_to_index(x, y)] != 0
     }
 
     pub fn random_walk<R: Rng>(&mut self, iter: i32, rng: &mut R) {
-        let mut p;
+        let mut x;
+        let mut y;
 
         // find free space
         loop {
-            p = Particle {
-                x: rng.gen_range(0, self.width),
-                y: rng.gen_range(0, self.height),
-            };
+            x = rng.gen_range(0..self.width);
+            y = rng.gen_range(0..self.height);
 
-            if self.in_free_space(&p) {
+            if self.in_free_space(x,y) {
                 break;
             }
         }
 
         // now simulate until it hits another particle.
         loop {
-            if self.attaches(&p) {
-                self.set_aggregate(p.x, p.y, iter, rng);
+            if self.attaches(x, y) {
+                self.set_aggregate(x, y, iter, rng);
                 break;
             }
-            let mut x: i32 = p.x as i32;
-            let mut y: i32 = p.y as i32;
 
-            let off_x: i32 = rng.gen_range(0i32, 3) - 1;
-            let off_y: i32 = rng.gen_range(0i32, 3) - 1;
+            let mut x_i32: i32 = x as i32;
+            let mut y_i32: i32 = y as i32;
 
-            x += off_x;
-            y += off_y;
+            let dx: i32 = rng.gen_range(0i32..3) - 1;
+            let dy: i32 = rng.gen_range(0i32..3) - 1;
 
-            if x >= 0 && x < self.width as i32 {
-                p.x = x as u32;
+            x_i32 += dx;
+            y_i32 += dy;
+
+            if x_i32 >= 0 && x_i32 < self.width as i32 {
+                x = x_i32 as u32;
             }
 
-            if y >= 0 && y < self.height as i32 {
-                p.y = y as u32;
+            if y_i32 >= 0 && y_i32 < self.height as i32 {
+                y = y_i32 as u32;
             }
         }
     }
 
     /// Prune terminal aggregate particles with `probability`
-
     pub fn prune<R>(&mut self, prune_probability: f32, prune_age: i32, rng: &mut R)
         where R: Rng
     {
@@ -183,7 +158,6 @@ impl Space2d {
 
     /// There can be up to eight potential parent particles which this particle could attach to.
     /// Choose a random one in case there is more than one.
-
     fn set_aggregate<R>(&mut self, x: u32, y: u32, age: i32, rng: &mut R)
         where R: Rng
     {
@@ -212,7 +186,7 @@ impl Space2d {
                 panic!();
             }
             1 => potential_parents.as_slice()[0],
-            n => potential_parents.as_slice()[rng.gen_range(0, n)],
+            n => potential_parents.as_slice()[rng.gen_range(0..n)],
         };
 
         debug_assert!(self.aggregates[idx].age < 0);
@@ -249,7 +223,7 @@ impl Space2d {
         self.neighborhood[idx + 1 + rw] = 1;
     }
 
-    fn get_pixel(&self, x: u32, y: u32) -> Option<u32> {
+    fn get_age(&self, x: u32, y: u32) -> Option<u32> {
         let idx = self.xy_to_index(x, y);
         let age = self.aggregates[idx].age;
         if age < 0 {
@@ -275,64 +249,72 @@ impl Space2d {
         }
     }
 
-    pub fn save_png(&self, filename: &str, colors: &[(u8, u8, u8)], colors_step: u32) {
-        let mut imgbuf = image::RgbaImage::new(self.width, self.height);
+    // Returns a width * height grayscale image - pixels part of dla aggregate will be black
+    pub fn to_image_buf(&self) -> image::GrayImage {
+        let mut imgbuf = image::GrayImage::from_pixel(self.width, self.height, image::Luma([255]));
 
         for (x, y, pixel) in imgbuf.enumerate_pixels_mut() {
-            let (r, g, b) = match self.get_pixel(x, y) {
-                None => {
-                    // white
-                    (255, 255, 255)
-                }
-                Some(age) => {
-                    let age = ((age as u32) / colors_step) as usize;
-                    colors[age % colors.len()]
-                }
-            };
-            *pixel = image::Rgba([r, g, b, 255]);
+            // change pixel color to black
+            // TODO: this changes all pixels to black - we want only some of them to be black
+            // TODO: query blah
+            *pixel = image::Luma([0]);
         }
 
-        let ref mut fout = File::create(&Path::new(filename)).unwrap();
-        let _ = image::DynamicImage::ImageRgba8(imgbuf).save(fout, image::PNG).unwrap();
+        imgbuf
+    }
+
+    pub fn save_image(&self, filename: &str) {
+        image::DynamicImage::ImageLuma8(self.to_image_buf()).save(&Path::new(filename)).unwrap();
+    } 
+}
+
+/// An aggregate particle attached to some other particle.
+#[derive(Copy, Clone)]
+struct Aggregate {
+    /// Age (iteration number). If negative, aggregate does not exist.
+    age: i32,
+
+    /// Counts the number of children we have
+    children: u32,
+
+    /// Points to the index of the parent particle
+    parent: usize,
+}
+
+impl Aggregate {
+    fn empty() -> Self {
+        Aggregate {
+            age: -1,
+            children: 0,
+            parent: usize::MAX,
+        }
     }
 }
 
-pub struct Pruning {
-    pub probability: f32,
-    pub every: u32,
-    pub age: i32,
+struct PotentialParents {
+    len: usize,
+    arr: [usize; 8],
 }
 
-pub fn simulate_dla<R>(rng: &mut R,
-                       width: u32,
-                       height: u32,
-                       iterations: u32,
-                       seeds: &[(u32, u32)],
-                       colors: &[(u8, u8, u8)],
-                       colors_step: u32,
-                       pruning: Option<Pruning>,
-                       save_every: u32,
-                       basename: &str)
-    where R: Rng
-{
-    let mut space = Space2d::new(width, height);
-
-    for &(x, y) in seeds {
-        space.set_seed(x, y, 0);
-    }
-
-    space.save_png(&format!("{}_init.png", basename), colors, colors_step);
-
-    for i in 0..iterations {
-        if i % save_every == 0 {
-            space.save_png(&format!("{}_{:05}.png", basename, i), colors, colors_step);
-        }
-        space.random_walk(i as i32, rng);
-        if let Some(ref prune) = pruning {
-            if i % prune.every == 0 {
-                space.prune(prune.probability, i as i32 - prune.age, rng);
-            }
+impl PotentialParents {
+    fn new() -> Self {
+        PotentialParents {
+            len: 0,
+            arr: [0; 8],
         }
     }
-    space.save_png(&format!("{}_final.png", basename), colors, colors_step);
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn push(&mut self, element: usize) {
+        debug_assert!(self.len < 8);
+        self.arr[self.len] = element;
+        self.len += 1;
+    }
+
+    fn as_slice(&self) -> &[usize] {
+        &self.arr[0..self.len]
+    }
 }

@@ -1,13 +1,18 @@
 extern crate dla;
-extern crate pcg;
 extern crate rand;
+extern crate bevy_prng;
+extern crate bevy_rand;
 
-use pcg::PcgRng;
 use rand::SeedableRng;
 use dla::{simulate_dla, Pruning};
+use bevy_prng::WyRand;
+use bevy_rand::prelude::EntropyComponent;
+
+/// `bevy_ecs` compatible non-secure BevyRng alias
+pub type BevyRng = EntropyComponent<WyRand>;
 
 fn main() {
-    let mut rng: PcgRng = SeedableRng::from_seed([0, 0]);
+    let mut rng: BevyRng = SeedableRng::seed_from_u64(1);
     const W: u32 = 400;
     const H: u32 = 180;
     const N: u32 = 50_000;
@@ -43,15 +48,10 @@ fn main() {
         age: 100,
     });
 
-    let colors = [(0, 0, 0), (255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255), (0, 255, 255)];
     simulate_dla(&mut rng,
                  W,
                  H,
                  N,
                  &seeds,
-                 &colors,
-                 2000,
-                 pruning,
-                 500,
-                 "dla_pruning_23");
+                 pruning);
 }
